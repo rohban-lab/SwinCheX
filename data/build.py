@@ -84,14 +84,14 @@ def build_dataset(is_train, config):
             dataset = datasets.ImageFolder(root, transform=transform)
         nb_classes = 1000
     elif config.DATA.DATASET == 'nih':
-        train_csv_path = '/mnt/sda1/datasets/sina/transformer/csv/train_without_nofinding.csv'
-        test_csv_path = '/mnt/sda1/datasets/sina/transformer/csv/test_without_nofinding.csv'
-        trainset = MyImageFolder(root=config.NIH.trainset, csv_path=train_csv_path, transform=transform,
-                                 class_num=config.NIH.class_num)        #todo transform ok?
-        testset = MyImageFolder(root=config.NIH.testset, csv_path=test_csv_path, transform=transform,
-                                class_num=config.NIH.class_num)
+        # train_csv_path = '/mnt/sda1/datasets/sina/transformer/csv/train_without_nofinding.csv'
+        # test_csv_path = '/mnt/sda1/datasets/sina/transformer/csv/test_without_nofinding.csv'
+        train_csv_path = '/home/user01/nih/csv/train_without_nofinding.csv'
+        test_csv_path = '/home/user01/nih/csv/test_without_nofinding.csv'
+        trainset = MyImageFolder(root=config.NIH.trainset, csv_path=train_csv_path, transform=transform)        #todo transform ok?
+        testset = MyImageFolder(root=config.NIH.testset, csv_path=test_csv_path, transform=transform)
         dataset = trainset if is_train else testset
-        nb_classes = 2
+        nb_classes = 14
     else:
         raise NotImplementedError("We only support ImageNet and NIH Now.")
 

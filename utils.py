@@ -23,10 +23,15 @@ def load_checkpoint(config, model, optimizer, lr_scheduler, logger):
             config.MODEL.RESUME, map_location='cpu', check_hash=True)
     else:
         checkpoint = torch.load(config.MODEL.RESUME, map_location='cpu')
-    checkpoint['model']['head.weight'] = torch.zeros(2, model.num_features)    #Todo avoid hardcode(2)
-    checkpoint['model']['head.bias'] = torch.zeros(2)
-    msg = model.load_state_dict(checkpoint['model'], strict=False)
-    logger.info(msg)
+    sd = model.state_dict()
+    for key, value in checkpoint['model'].items():
+        if key != 'head.weight' and key != 'head.bias':
+            sd[key] = value
+    # checkpoint['model']['head.weight'] = torch.zeros(2, model.num_features)    #Todo avoid hardcode(2)
+    # checkpoint['model']['head.bias'] = torch.zeros(2)
+    # msg = model.load_state_dict(checkpoint['model'], strict=False)
+    # logger.info(msg)
+    logger.info("Pretrain model loaded successfully!")
     max_accuracy = 0.0
     if not config.EVAL_MODE and 'optimizer' in checkpoint and 'lr_scheduler' in checkpoint and 'epoch' in checkpoint:
         optimizer.load_state_dict(checkpoint['optimizer'])

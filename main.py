@@ -71,8 +71,8 @@ def parse_option():
     #nih
     parser.add_argument("--trainset", type=str, required=True, help='path to train dataset')
     parser.add_argument("--testset", type=str, required=True, help='path to test dataset')
-    parser.add_argument("--class_num", required=True, type=int,
-                        help="Class number for binary classification, 0-13 for nih")
+    # parser.add_argument("--class_num", required=True, type=int,
+    #                     help="Class number for binary classification, 0-13 for nih")
 
     args, unparsed = parser.parse_known_args()
 
@@ -128,7 +128,7 @@ def main(config):
     if config.MODEL.RESUME:
         max_accuracy = load_checkpoint(config, model_without_ddp, optimizer, lr_scheduler, logger)
         acc1, acc5, loss = validate(config, data_loader_val, model)
-        logger.info(f"Accuracy of the network on the {len(dataset_val)} test images: {acc1:.1f}%")
+        logger.info(f"Mean Accuracy of the network on the {len(dataset_val)} test images: {acc1:.1f}%")
         if config.EVAL_MODE:
             return
 
@@ -146,9 +146,9 @@ def main(config):
             save_checkpoint(config, epoch, model_without_ddp, max_accuracy, optimizer, lr_scheduler, logger)
 
         acc1, acc5, loss = validate(config, data_loader_val, model)
-        logger.info(f"Accuracy of the network on the {len(dataset_val)} test images: {acc1:.1f}%")
+        logger.info(f"Mean Accuracy of the network on the {len(dataset_val)} test images: {acc1:.1f}%")
         max_accuracy = max(max_accuracy, acc1)
-        logger.info(f'Max accuracy: {max_accuracy:.2f}%')
+        logger.info(f'Max mean accuracy: {max_accuracy:.2f}%')
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
@@ -168,15 +168,18 @@ def train_one_epoch(config, model, criterion, data_loader, optimizer, epoch, mix
     end = time.time()
     for idx, (samples, targets) in enumerate(data_loader):
         samples = samples.cuda(non_blocking=True)
-        targets = targets.cuda(non_blocking=True)
+        for i in range(len(targets)):
+            targets[i] = targets[i].cuda(non_blocking=True)
 
         if mixup_fn is not None:
-            samples, targets = mixup_fn(samples, targets)
+            samples, targets = mixup_fn(samples, targets)   #todo for on targets
 
         outputs = model(samples)
 
         if config.TRAIN.ACCUMULATION_STEPS > 1:
-            loss = criterion(outputs, targets)
+            loss = criterion(outputs[0], targets[0])
+            for i in range(1, len(targets)):
+                loss += criterion(outputs[i], targets[i])
             loss = loss / config.TRAIN.ACCUMULATION_STEPS
             if config.AMP_OPT_LEVEL != "O0":
                 with amp.scale_loss(loss, optimizer) as scaled_loss:
@@ -196,7 +199,9 @@ def train_one_epoch(config, model, criterion, data_loader, optimizer, epoch, mix
                 optimizer.zero_grad()
                 lr_scheduler.step_update(epoch * num_steps + idx)
         else:
-            loss = criterion(outputs, targets)
+            loss = criterion(outputs[0], targets[0])
+            for i in range(1, len(targets)):
+                loss += criterion(outputs[i], targets[i])
             optimizer.zero_grad()
             if config.AMP_OPT_LEVEL != "O0":
                 with amp.scale_loss(loss, optimizer) as scaled_loss:
@@ -216,7 +221,7 @@ def train_one_epoch(config, model, criterion, data_loader, optimizer, epoch, mix
 
         torch.cuda.synchronize()
 
-        loss_meter.update(loss.item(), targets.size(0))
+        loss_meter.update(loss.item(), targets[0].size(0))  # todo * len(targets)?
         norm_meter.update(grad_norm)
         batch_time.update(time.time() - end)
         end = time.time()
@@ -241,67 +246,86 @@ def validate(config, data_loader, model):
     criterion = torch.nn.CrossEntropyLoss()
     model.eval()
 
-    batch_time = AverageMeter()
-    loss_meter = AverageMeter()
-    acc1_meter = AverageMeter()
-    acc5_meter = AverageMeter()
+    batch_time = [AverageMeter() for _ in range(14)]
+    loss_meter = [AverageMeter() for _ in range(14)]
+    acc1_meter = [AverageMeter() for _ in range(14)]
+    acc5_meter = [AverageMeter() for _ in range(14)]
+
+    acc1s = []
+    acc5s = []
+    losses = []
+    aucs = []
 
     end = time.time()
-    all_preds, all_label = [], []
+    all_preds = [[] for _ in range(14)]
+    all_label = [[] for _ in range(14)]
     for idx, (images, target) in enumerate(data_loader):
         images = images.cuda(non_blocking=True)
-        target = target.cuda(non_blocking=True)
+        for i in range(len(target)):
+            target[i] = target[i].cuda(non_blocking=True)
 
         # compute output
         output = model(images)
 
-        # measure accuracy and record loss
-        loss = criterion(output, target)
-        # acc1, acc5 = accuracy(output, target, topk=(1, 5))
-        acc1 = accuracy(output, target, topk=(1,)) # Todo calc auc
-        acc1 = torch.Tensor(acc1).to(device='cuda')   # wtf? without this added line it get's error in reduce_tensor because it's a list. So the original code shouldn't work too!?
-        acc1 = reduce_tensor(acc1)
-        # acc5 = reduce_tensor(acc5)
-        loss = reduce_tensor(loss)
+        for i in range(len(target)):
+            # measure accuracy and record loss
+            loss = criterion(output[i], target[i])
+            # acc1, acc5 = accuracy(output, target, topk=(1, 5))
+            acc1 = accuracy(output[i], target[i], topk=(1,))
+            acc1 = torch.Tensor(acc1).to(device='cuda')   # wtf? without this added line it get's error in reduce_tensor because it's a list. So the original code shouldn't work too!?
+            acc1 = reduce_tensor(acc1)
+            # acc5 = reduce_tensor(acc5)
+            loss = reduce_tensor(loss)
 
-        loss_meter.update(loss.item(), target.size(0))
-        acc1_meter.update(acc1.item(), target.size(0))
-        # acc5_meter.update(acc5.item(), target.size(0))
+            loss_meter[i].update(loss.item(), target[i].size(0))
+            acc1_meter[i].update(acc1.item(), target[i].size(0))
+            # acc5_meter.update(acc5.item(), target.size(0))
+
+            # auc
+            preds = F.softmax(output[i], dim=1)
+            if len(all_preds[i]) == 0:
+                all_preds[i].append(preds.detach().cpu().numpy())
+                all_label[i].append(target[i].detach().cpu().numpy())
+            else:
+                all_preds[i][0] = np.append(
+                    all_preds[i][0], preds.detach().cpu().numpy(), axis=0
+                )
+                all_label[i][0] = np.append(
+                    all_label[i][0], target[i].detach().cpu().numpy(), axis=0
+                )
+
+            # measure elapsed time
+            batch_time[i].update(time.time() - end)
+            end = time.time()
+
+            if idx % config.PRINT_FREQ == 0:
+                memory_used = torch.cuda.max_memory_allocated() / (1024.0 * 1024.0)
+                logger.info(
+                    f'Test: [{idx}/{len(data_loader)}]\t'
+                    f'Time {batch_time[i].val:.3f} ({batch_time[i].avg:.3f})\t'
+                    f'Loss {loss_meter[i].val:.4f} ({loss_meter[i].avg:.4f})\t'
+                    f'Acc@1 {acc1_meter[i].val:.3f} ({acc1_meter[i].avg:.3f})\t'
+                    f'Acc@5 {acc5_meter[i].val:.3f} ({acc5_meter[i].avg:.3f})\t'
+                    f'Mem {memory_used:.0f}MB\t'
+                    f'Class {i}')
+
+    for i in range(14):
+        logger.info(f' * Acc@1 {acc1_meter[i].avg:.3f} Acc@5 {acc5_meter[i].avg:.3f}')
 
         # auc
-        preds = F.softmax(output, dim=1)
-        if len(all_preds) == 0:
-            all_preds.append(preds.detach().cpu().numpy())
-            all_label.append(target.detach().cpu().numpy())
-        else:
-            all_preds[0] = np.append(
-                all_preds[0], preds.detach().cpu().numpy(), axis=0
-            )
-            all_label[0] = np.append(
-                all_label[0], target.detach().cpu().numpy(), axis=0
-            )
+        all_preds[i], all_label[i] = all_preds[i][0], all_label[i][0]
+        auc = roc_auc_score(all_label[i], all_preds[i][:, 1], multi_class='ovr')
+        logger.info("Valid AUC: %2.5f" % auc)
 
-        # measure elapsed time
-        batch_time.update(time.time() - end)
-        end = time.time()
+        acc1s.append(acc1_meter[i].avg)
+        acc5s.append(acc5_meter[i].avg)
+        losses.append(loss_meter[i].avg)
+        aucs.append(auc)
 
-        if idx % config.PRINT_FREQ == 0:
-            memory_used = torch.cuda.max_memory_allocated() / (1024.0 * 1024.0)
-            logger.info(
-                f'Test: [{idx}/{len(data_loader)}]\t'
-                f'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                f'Loss {loss_meter.val:.4f} ({loss_meter.avg:.4f})\t'
-                f'Acc@1 {acc1_meter.val:.3f} ({acc1_meter.avg:.3f})\t'
-                f'Acc@5 {acc5_meter.val:.3f} ({acc5_meter.avg:.3f})\t'
-                f'Mem {memory_used:.0f}MB')
-    logger.info(f' * Acc@1 {acc1_meter.avg:.3f} Acc@5 {acc5_meter.avg:.3f}')
+    from statistics import mean
+    logger.info("MEAN AUC: %2.5f" % mean(aucs))
 
-    # auc
-    all_preds, all_label = all_preds[0], all_label[0]
-    auc = roc_auc_score(all_label, all_preds[:, 1], multi_class='ovr')
-    logger.info("Valid AUC: %2.5f" % auc)
-
-    return acc1_meter.avg, acc5_meter.avg, loss_meter.avg
+    return mean(acc1s), mean(acc5s), mean(losses)
 
 
 @torch.no_grad()

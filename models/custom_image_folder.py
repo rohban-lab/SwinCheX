@@ -206,14 +206,12 @@ class MyImageFolder(MyDatasetFolder):
             target_transform: Optional[Callable] = None,
             loader: Callable[[str], Any] = default_loader,
             is_valid_file: Optional[Callable[[str], bool]] = None,
-            class_num: int = 0
     ):
         super(MyImageFolder, self).__init__(root, csv_path, loader, IMG_EXTENSIONS if is_valid_file is None else None,
                                             transform=transform,
                                             target_transform=target_transform,
                                             is_valid_file=is_valid_file)
         self.imgs = self.samples
-        self.class_num = class_num
 
     def __getitem__(self, index):
         path, target = self.samples[index]
@@ -222,6 +220,6 @@ class MyImageFolder(MyDatasetFolder):
             sample = self.transform(sample)
         if self.target_transform is not None:
             target = self.target_transform(target)
-        return sample, target[self.class_num].long()
+        return sample, [target[i].long() for i in range(len(target))]
 
 # class MyImageFolder(ImageFolder):

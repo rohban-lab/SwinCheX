@@ -37,7 +37,7 @@ _C.DATA.CACHE_MODE = 'part'
 # Pin CPU memory in DataLoader for more efficient (sometimes) transfer to GPU.
 _C.DATA.PIN_MEMORY = True
 # Number of data loading threads
-_C.DATA.NUM_WORKERS = 8
+_C.DATA.NUM_WORKERS = 2
 
 # -----------------------------------------------------------------------------
 # Model settings
@@ -50,7 +50,8 @@ _C.MODEL.NAME = 'swin_tiny_patch4_window7_224'
 # Checkpoint to resume, could be overwritten by command line argument
 _C.MODEL.RESUME = ''
 # Number of classes, overwritten in data preparation
-_C.MODEL.NUM_CLASSES = 1000
+# _C.MODEL.NUM_CLASSES = 1000
+_C.MODEL.NUM_CLASSES = 14
 # Dropout rate
 _C.MODEL.DROP_RATE = 0.0
 # Drop path rate
@@ -127,9 +128,11 @@ _C.AUG.REMODE = 'pixel'
 # Random erase count
 _C.AUG.RECOUNT = 1
 # Mixup alpha, mixup enabled if > 0
-_C.AUG.MIXUP = 0.8
+# _C.AUG.MIXUP = 0.8
+_C.AUG.MIXUP = 0    # todo what is mixup for?
 # Cutmix alpha, cutmix enabled if > 0
-_C.AUG.CUTMIX = 1.0
+# _C.AUG.CUTMIX = 1.0
+_C.AUG.CUTMIX = 0
 # Cutmix min/max ratio, overrides alpha and enables cutmix if set
 _C.AUG.CUTMIX_MINMAX = None
 # Probability of performing mixup or cutmix when either/both is enabled
@@ -157,9 +160,9 @@ _C.OUTPUT = ''
 # Tag of experiment, overwritten by command line argument
 _C.TAG = 'default'
 # Frequency to save checkpoint
-_C.SAVE_FREQ = 5
+_C.SAVE_FREQ = 1
 # Frequency to logging info
-_C.PRINT_FREQ = 100
+_C.PRINT_FREQ = 200
 # Fixed random seed
 _C.SEED = 0
 # Perform evaluation only, overwritten by command line argument
@@ -173,7 +176,7 @@ _C.LOCAL_RANK = 0
 _C.NIH = CN()
 _C.NIH.trainset = ''
 _C.NIH.testset = ''
-_C.NIH.class_num = -1
+# _C.NIH.class_num = -1
 
 
 def _update_config_from_file(config, cfg_file):
@@ -233,7 +236,7 @@ def update_config(config, args):
     # nih
     config.NIH.trainset = args.trainset
     config.NIH.testset = args.testset
-    config.NIH.class_num = args.class_num
+    # config.NIH.class_num = args.class_num
 
     config.freeze()
 

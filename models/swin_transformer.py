@@ -535,7 +535,9 @@ class SwinTransformer(nn.Module):
 
         self.norm = norm_layer(self.num_features)
         self.avgpool = nn.AdaptiveAvgPool1d(1)
-        self.head = nn.Linear(self.num_features, num_classes) if num_classes > 0 else nn.Identity()
+        self.heads = nn.ModuleList()
+        for i in range(num_classes):
+            self.heads.append(nn.Linear(self.num_features, 2))     # todo more linear layers because of multihead?
 
         self.apply(self._init_weights)
 
@@ -572,8 +574,10 @@ class SwinTransformer(nn.Module):
 
     def forward(self, x):
         x = self.forward_features(x)
-        x = self.head(x)
-        return x
+        y = []
+        for head in self.heads:
+            y.append(head(x))
+        return y
 
     def flops(self):
         flops = 0
