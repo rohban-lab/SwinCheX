@@ -23,6 +23,8 @@ def load_checkpoint(config, model, optimizer, lr_scheduler, logger):
             config.MODEL.RESUME, map_location='cpu', check_hash=True)
     else:
         checkpoint = torch.load(config.MODEL.RESUME, map_location='cpu')
+    checkpoint['model']['head.weight'] = torch.zeros(2, model.num_features)    #Todo avoid hardcode(2)
+    checkpoint['model']['head.bias'] = torch.zeros(2)
     msg = model.load_state_dict(checkpoint['model'], strict=False)
     logger.info(msg)
     max_accuracy = 0.0

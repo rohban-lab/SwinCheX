@@ -23,7 +23,8 @@ _C.DATA.BATCH_SIZE = 128
 # Path to dataset, could be overwritten by command line argument
 _C.DATA.DATA_PATH = ''
 # Dataset name
-_C.DATA.DATASET = 'imagenet'
+# _C.DATA.DATASET = 'imagenet'
+_C.DATA.DATASET = 'nih'
 # Input image size
 _C.DATA.IMG_SIZE = 224
 # Interpolation to resize image (random, bilinear, bicubic)
@@ -70,18 +71,6 @@ _C.MODEL.SWIN.QKV_BIAS = True
 _C.MODEL.SWIN.QK_SCALE = None
 _C.MODEL.SWIN.APE = False
 _C.MODEL.SWIN.PATCH_NORM = True
-
-# Swin MLP parameters
-_C.MODEL.SWIN_MLP = CN()
-_C.MODEL.SWIN_MLP.PATCH_SIZE = 4
-_C.MODEL.SWIN_MLP.IN_CHANS = 3
-_C.MODEL.SWIN_MLP.EMBED_DIM = 96
-_C.MODEL.SWIN_MLP.DEPTHS = [2, 2, 6, 2]
-_C.MODEL.SWIN_MLP.NUM_HEADS = [3, 6, 12, 24]
-_C.MODEL.SWIN_MLP.WINDOW_SIZE = 7
-_C.MODEL.SWIN_MLP.MLP_RATIO = 4.
-_C.MODEL.SWIN_MLP.APE = False
-_C.MODEL.SWIN_MLP.PATCH_NORM = True
 
 # -----------------------------------------------------------------------------
 # Training settings
@@ -168,9 +157,9 @@ _C.OUTPUT = ''
 # Tag of experiment, overwritten by command line argument
 _C.TAG = 'default'
 # Frequency to save checkpoint
-_C.SAVE_FREQ = 1
+_C.SAVE_FREQ = 5
 # Frequency to logging info
-_C.PRINT_FREQ = 10
+_C.PRINT_FREQ = 100
 # Fixed random seed
 _C.SEED = 0
 # Perform evaluation only, overwritten by command line argument
@@ -179,6 +168,12 @@ _C.EVAL_MODE = False
 _C.THROUGHPUT_MODE = False
 # local rank for DistributedDataParallel, given by command line argument
 _C.LOCAL_RANK = 0
+
+#nih
+_C.NIH = CN()
+_C.NIH.trainset = ''
+_C.NIH.testset = ''
+_C.NIH.class_num = -1
 
 
 def _update_config_from_file(config, cfg_file):
@@ -234,6 +229,11 @@ def update_config(config, args):
 
     # output folder
     config.OUTPUT = os.path.join(config.OUTPUT, config.MODEL.NAME, config.TAG)
+
+    # nih
+    config.NIH.trainset = args.trainset
+    config.NIH.testset = args.testset
+    config.NIH.class_num = args.class_num
 
     config.freeze()
 

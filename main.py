@@ -14,6 +14,7 @@ import numpy as np
 import torch
 import torch.backends.cudnn as cudnn
 import torch.distributed as dist
+import torch.nn.functional as F
 
 from timm.loss import LabelSmoothingCrossEntropy, SoftTargetCrossEntropy
 from timm.utils import accuracy, AverageMeter
@@ -25,6 +26,7 @@ from lr_scheduler import build_scheduler
 from optimizer import build_optimizer
 from logger import create_logger
 from utils import load_checkpoint, save_checkpoint, get_grad_norm, auto_resume_helper, reduce_tensor
+from sklearn.metrics import roc_auc_score
 
 try:
     # noinspection PyUnresolvedReferences
@@ -65,6 +67,12 @@ def parse_option():
 
     # distributed training
     parser.add_argument("--local_rank", type=int, required=True, help='local rank for DistributedDataParallel')
+
+    #nih
+    parser.add_argument("--trainset", type=str, required=True, help='path to train dataset')
+    parser.add_argument("--testset", type=str, required=True, help='path to test dataset')
+    parser.add_argument("--class_num", required=True, type=int,
+                        help="Class number for binary classification, 0-13 for nih")
 
     args, unparsed = parser.parse_known_args()
 
@@ -239,6 +247,7 @@ def validate(config, data_loader, model):
     acc5_meter = AverageMeter()
 
     end = time.time()
+    all_preds, all_label = [], []
     for idx, (images, target) in enumerate(data_loader):
         images = images.cuda(non_blocking=True)
         target = target.cuda(non_blocking=True)
@@ -248,15 +257,29 @@ def validate(config, data_loader, model):
 
         # measure accuracy and record loss
         loss = criterion(output, target)
-        acc1, acc5 = accuracy(output, target, topk=(1, 5))
-
+        # acc1, acc5 = accuracy(output, target, topk=(1, 5))
+        acc1 = accuracy(output, target, topk=(1,)) # Todo calc auc
+        acc1 = torch.Tensor(acc1).to(device='cuda')   # wtf? without this added line it get's error in reduce_tensor because it's a list. So the original code shouldn't work too!?
         acc1 = reduce_tensor(acc1)
-        acc5 = reduce_tensor(acc5)
+        # acc5 = reduce_tensor(acc5)
         loss = reduce_tensor(loss)
 
         loss_meter.update(loss.item(), target.size(0))
         acc1_meter.update(acc1.item(), target.size(0))
-        acc5_meter.update(acc5.item(), target.size(0))
+        # acc5_meter.update(acc5.item(), target.size(0))
+
+        # auc
+        preds = F.softmax(output, dim=1)
+        if len(all_preds) == 0:
+            all_preds.append(preds.detach().cpu().numpy())
+            all_label.append(target.detach().cpu().numpy())
+        else:
+            all_preds[0] = np.append(
+                all_preds[0], preds.detach().cpu().numpy(), axis=0
+            )
+            all_label[0] = np.append(
+                all_label[0], target.detach().cpu().numpy(), axis=0
+            )
 
         # measure elapsed time
         batch_time.update(time.time() - end)
@@ -272,6 +295,12 @@ def validate(config, data_loader, model):
                 f'Acc@5 {acc5_meter.val:.3f} ({acc5_meter.avg:.3f})\t'
                 f'Mem {memory_used:.0f}MB')
     logger.info(f' * Acc@1 {acc1_meter.avg:.3f} Acc@5 {acc5_meter.avg:.3f}')
+
+    # auc
+    all_preds, all_label = all_preds[0], all_label[0]
+    auc = roc_auc_score(all_label, all_preds[:, 1], multi_class='ovr')
+    logger.info("Valid AUC: %2.5f" % auc)
+
     return acc1_meter.avg, acc5_meter.avg, loss_meter.avg
 
 

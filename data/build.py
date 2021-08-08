@@ -15,6 +15,7 @@ from timm.data import Mixup
 from timm.data import create_transform
 from timm.data.transforms import _pil_interp
 
+from models.custom_image_folder import MyImageFolder
 from .cached_image_folder import CachedImageFolder
 from .samplers import SubsetRandomSampler
 
@@ -82,8 +83,17 @@ def build_dataset(is_train, config):
             root = os.path.join(config.DATA.DATA_PATH, prefix)
             dataset = datasets.ImageFolder(root, transform=transform)
         nb_classes = 1000
+    elif config.DATA.DATASET == 'nih':
+        train_csv_path = '/mnt/sda1/datasets/sina/transformer/csv/train_without_nofinding.csv'
+        test_csv_path = '/mnt/sda1/datasets/sina/transformer/csv/test_without_nofinding.csv'
+        trainset = MyImageFolder(root=config.NIH.trainset, csv_path=train_csv_path, transform=transform,
+                                 class_num=config.NIH.class_num)        #todo transform ok?
+        testset = MyImageFolder(root=config.NIH.testset, csv_path=test_csv_path, transform=transform,
+                                class_num=config.NIH.class_num)
+        dataset = trainset if is_train else testset
+        nb_classes = 2
     else:
-        raise NotImplementedError("We only support ImageNet Now.")
+        raise NotImplementedError("We only support ImageNet and NIH Now.")
 
     return dataset, nb_classes
 
