@@ -160,9 +160,9 @@ _C.OUTPUT = ''
 # Tag of experiment, overwritten by command line argument
 _C.TAG = 'default'
 # Frequency to save checkpoint
-_C.SAVE_FREQ = 1
+_C.SAVE_FREQ = 5
 # Frequency to logging info
-_C.PRINT_FREQ = 200
+_C.PRINT_FREQ = 400
 # Fixed random seed
 _C.SEED = 0
 # Perform evaluation only, overwritten by command line argument
