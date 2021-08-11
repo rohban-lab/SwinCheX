@@ -537,6 +537,7 @@ class SwinTransformer(nn.Module):
         self.avgpool = nn.AdaptiveAvgPool1d(1)
         self.heads = nn.ModuleList()
         self.heads2 = nn.ModuleList()
+        self.relu = nn.ReLU()
         for i in range(num_classes):
             self.heads.append(nn.Linear(self.num_features, 48))
             self.heads2.append(nn.Linear(48, 2))    # todo test different layers
@@ -578,7 +579,7 @@ class SwinTransformer(nn.Module):
         x = self.forward_features(x)
         y = []
         for i in range(len(self.heads)):
-            y.append(self.heads2[i](self.heads[i](x)))
+            y.append(self.heads2[i](self.relu(self.heads[i](x))))
         return y
 
     def flops(self):
