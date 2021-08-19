@@ -25,8 +25,9 @@ def load_checkpoint(config, model, optimizer, lr_scheduler, logger):
         checkpoint = torch.load(config.MODEL.RESUME, map_location='cpu')
     sd = model.state_dict()
     for key, value in checkpoint['model'].items():
-        if key != 'head.weight' and key != 'head.bias':
+        if key != 'head.weight' and key != 'head.bias':     # todo should remove this line when continuing from checkpoint (not pretrain)
             sd[key] = value
+    model.load_state_dict(sd)
     # checkpoint['model']['head.weight'] = torch.zeros(2, model.num_features)    #Todo avoid hardcode(2)
     # checkpoint['model']['head.bias'] = torch.zeros(2)
     # msg = model.load_state_dict(checkpoint['model'], strict=False)
