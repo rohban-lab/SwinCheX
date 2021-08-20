@@ -175,6 +175,7 @@ _C.LOCAL_RANK = 0
 #nih
 _C.NIH = CN()
 _C.NIH.trainset = ''
+_C.NIH.validset = ''
 _C.NIH.testset = ''
 # _C.NIH.class_num = -1
 
@@ -235,6 +236,7 @@ def update_config(config, args):
 
     # nih
     config.NIH.trainset = args.trainset
+    config.NIH.validset = args.validset
     config.NIH.testset = args.testset
     # config.NIH.class_num = args.class_num
 

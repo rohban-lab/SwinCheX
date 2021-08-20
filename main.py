@@ -70,6 +70,7 @@ def parse_option():
 
     #nih
     parser.add_argument("--trainset", type=str, required=True, help='path to train dataset')
+    parser.add_argument("--validset", type=str, required=True, help='path to validation dataset')
     parser.add_argument("--testset", type=str, required=True, help='path to test dataset')
     # parser.add_argument("--class_num", required=True, type=int,
     #                     help="Class number for binary classification, 0-13 for nih")
@@ -82,7 +83,7 @@ def parse_option():
 
 
 def main(config):
-    dataset_train, dataset_val, data_loader_train, data_loader_val, mixup_fn = build_loader(config)
+    dataset_train, dataset_val, dataset_test, data_loader_train, data_loader_val, data_loader_test, mixup_fn = build_loader(config)
 
     logger.info(f"Creating model:{config.MODEL.TYPE}/{config.MODEL.NAME}")
     model = build_model(config)
@@ -128,12 +129,17 @@ def main(config):
     if config.MODEL.RESUME:
         max_accuracy = load_checkpoint(config, model_without_ddp, optimizer, lr_scheduler, logger)
         acc1, acc5, loss = validate(config, data_loader_val, model)
-        logger.info(f"Mean Accuracy of the network on the {len(dataset_val)} test images: {acc1:.1f}%")
+        logger.info(f"Mean Accuracy of the network on the {len(dataset_val)} validation images: {acc1:.2f}%")
+        logger.info(f"Mean Loss of the network on the {len(dataset_val)} validation images: {loss:.5f}%")
+        acc1, acc5, loss = validate(config, data_loader_test, model)
+        logger.info(f"Mean Accuracy of the network on the {len(dataset_test)} test images: {acc1:.2f}%")
+        logger.info(f"Mean Loss of the network on the {len(dataset_val)} test images: {loss:.5f}%")
         if config.EVAL_MODE:
             return
 
     if config.THROUGHPUT_MODE:
         throughput(data_loader_val, model, logger)
+        throughput(data_loader_test, model, logger)
         return
 
     logger.info("Start training")
@@ -146,7 +152,11 @@ def main(config):
             save_checkpoint(config, epoch, model_without_ddp, max_accuracy, optimizer, lr_scheduler, logger)
 
         acc1, acc5, loss = validate(config, data_loader_val, model)
-        logger.info(f"Mean Accuracy of the network on the {len(dataset_val)} test images: {acc1:.1f}%")
+        logger.info(f"Mean Accuracy of the network on the {len(dataset_val)} validation images: {acc1:.2f}%")
+        logger.info(f"Mean Loss of the network on the {len(dataset_val)} validation images: {loss:.5f}%")
+        acc1, acc5, loss = validate(config, data_loader_test, model)
+        logger.info(f"Mean Accuracy of the network on the {len(dataset_test)} test images: {acc1:.2f}%")
+        logger.info(f"Mean Loss of the network on the {len(dataset_val)} test images: {loss:.5f}%")
         max_accuracy = max(max_accuracy, acc1)
         logger.info(f'Max mean accuracy: {max_accuracy:.2f}%')
 
@@ -237,6 +247,15 @@ def train_one_epoch(config, model, criterion, data_loader, optimizer, epoch, mix
                 f'loss {loss_meter.val:.4f} ({loss_meter.avg:.4f})\t'
                 f'grad_norm {norm_meter.val:.4f} ({norm_meter.avg:.4f})\t'
                 f'mem {memory_used:.0f}MB')
+    lr = optimizer.param_groups[0]['lr']
+    memory_used = torch.cuda.max_memory_allocated() / (1024.0 * 1024.0)
+    logger.info(
+        f'Train: [{epoch}/{config.TRAIN.EPOCHS}]\t'
+        f'lr {lr:.6f}\t'
+        f'time {batch_time.val:.4f} ({batch_time.avg:.4f})\t'
+        f'loss {loss_meter.val:.4f} ({loss_meter.avg:.4f})\t'
+        f'grad_norm {norm_meter.val:.4f} ({norm_meter.avg:.4f})\t'
+        f'mem {memory_used:.0f}MB')
     epoch_time = time.time() - start
     logger.info(f"EPOCH {epoch} training takes {datetime.timedelta(seconds=int(epoch_time))}")
 

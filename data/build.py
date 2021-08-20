@@ -25,7 +25,7 @@ def build_loader(config):
     dataset_train, config.MODEL.NUM_CLASSES = build_dataset(is_train=True, config=config)
     config.freeze()
     print(f"local rank {config.LOCAL_RANK} / global rank {dist.get_rank()} successfully build train dataset")
-    dataset_val, _ = build_dataset(is_train=False, config=config)
+    (dataset_val, dataset_test), _ = build_dataset(is_train=False, config=config)
     print(f"local rank {config.LOCAL_RANK} / global rank {dist.get_rank()} successfully build val dataset")
 
     num_tasks = dist.get_world_size()
@@ -38,9 +38,6 @@ def build_loader(config):
             dataset_train, num_replicas=num_tasks, rank=global_rank, shuffle=True
         )
 
-    indices = np.arange(dist.get_rank(), len(dataset_val), dist.get_world_size())
-    sampler_val = SubsetRandomSampler(indices)
-
     data_loader_train = torch.utils.data.DataLoader(
         dataset_train, sampler=sampler_train,
         batch_size=config.DATA.BATCH_SIZE,
@@ -50,7 +47,16 @@ def build_loader(config):
     )
 
     data_loader_val = torch.utils.data.DataLoader(
-        dataset_val, sampler=sampler_val,
+        dataset_val,
+        batch_size=config.DATA.BATCH_SIZE,
+        shuffle=False,
+        num_workers=config.DATA.NUM_WORKERS,
+        pin_memory=config.DATA.PIN_MEMORY,
+        drop_last=False
+    )
+
+    data_loader_test = torch.utils.data.DataLoader(
+        dataset_test,
         batch_size=config.DATA.BATCH_SIZE,
         shuffle=False,
         num_workers=config.DATA.NUM_WORKERS,
@@ -67,7 +73,7 @@ def build_loader(config):
             prob=config.AUG.MIXUP_PROB, switch_prob=config.AUG.MIXUP_SWITCH_PROB, mode=config.AUG.MIXUP_MODE,
             label_smoothing=config.MODEL.LABEL_SMOOTHING, num_classes=config.MODEL.NUM_CLASSES)
 
-    return dataset_train, dataset_val, data_loader_train, data_loader_val, mixup_fn
+    return dataset_train, dataset_val, dataset_test, data_loader_train, data_loader_val, data_loader_test, mixup_fn
 
 
 def build_dataset(is_train, config):
@@ -86,11 +92,15 @@ def build_dataset(is_train, config):
     elif config.DATA.DATASET == 'nih':
         # train_csv_path = '/mnt/sda1/datasets/sina/transformer/csv/train_without_nofinding.csv'
         # test_csv_path = '/mnt/sda1/datasets/sina/transformer/csv/test_without_nofinding.csv'
-        train_csv_path = '/home/user01/nih/csv/train_without_nofinding.csv'
-        test_csv_path = '/home/user01/nih/csv/test_without_nofinding.csv'
+        # train_csv_path = '/home/user01/nih/csv/train_without_nofinding.csv'
+        # test_csv_path = '/home/user01/nih/csv/test_without_nofinding.csv'
+        train_csv_path = '/home/user01/nih/csv_with_validation/train.csv'
+        valid_csv_path = '/home/user01/nih/csv_with_validation/validation.csv'
+        test_csv_path = '/home/user01/nih/csv_with_validation/test_without_nofinding.csv'
         trainset = MyImageFolder(root=config.NIH.trainset, csv_path=train_csv_path, transform=transform)        #todo transform ok?
+        validset = MyImageFolder(root=config.NIH.validset, csv_path=valid_csv_path, transform=transform)
         testset = MyImageFolder(root=config.NIH.testset, csv_path=test_csv_path, transform=transform)
-        dataset = trainset if is_train else testset
+        dataset = trainset if is_train else (validset, testset)
         nb_classes = 14
     else:
         raise NotImplementedError("We only support ImageNet and NIH Now.")
