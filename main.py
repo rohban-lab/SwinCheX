@@ -128,12 +128,12 @@ def main(config):
 
     if config.MODEL.RESUME:
         max_accuracy = load_checkpoint(config, model_without_ddp, optimizer, lr_scheduler, logger)
-        acc1, acc5, loss = validate(config, data_loader_val, model)
+        acc1, acc5, loss = validate(config, data_loader_val, model, is_validation=True)
         logger.info(f"Mean Accuracy of the network on the {len(dataset_val)} validation images: {acc1:.2f}%")
-        logger.info(f"Mean Loss of the network on the {len(dataset_val)} validation images: {loss:.5f}%")
-        acc1, acc5, loss = validate(config, data_loader_test, model)
+        logger.info(f"Mean Loss of the network on the {len(dataset_val)} validation images: {loss:.5f}")
+        acc1, acc5, loss = validate(config, data_loader_test, model, is_validation=False)
         logger.info(f"Mean Accuracy of the network on the {len(dataset_test)} test images: {acc1:.2f}%")
-        logger.info(f"Mean Loss of the network on the {len(dataset_val)} test images: {loss:.5f}%")
+        logger.info(f"Mean Loss of the network on the {len(dataset_test)} test images: {loss:.5f}")
         if config.EVAL_MODE:
             return
 
@@ -151,14 +151,14 @@ def main(config):
         if dist.get_rank() == 0 and (epoch % config.SAVE_FREQ == 0 or epoch == (config.TRAIN.EPOCHS - 1)):
             save_checkpoint(config, epoch, model_without_ddp, max_accuracy, optimizer, lr_scheduler, logger)
 
-        acc1, acc5, loss = validate(config, data_loader_val, model)
+        acc1, acc5, loss = validate(config, data_loader_val, model, is_validation=True)
         logger.info(f"Mean Accuracy of the network on the {len(dataset_val)} validation images: {acc1:.2f}%")
-        logger.info(f"Mean Loss of the network on the {len(dataset_val)} validation images: {loss:.5f}%")
-        acc1, acc5, loss = validate(config, data_loader_test, model)
+        logger.info(f"Mean Loss of the network on the {len(dataset_val)} validation images: {loss:.5f}")
+        acc1, acc5, loss = validate(config, data_loader_test, model, is_validation=False)
         logger.info(f"Mean Accuracy of the network on the {len(dataset_test)} test images: {acc1:.2f}%")
-        logger.info(f"Mean Loss of the network on the {len(dataset_val)} test images: {loss:.5f}%")
+        logger.info(f"Mean Loss of the network on the {len(dataset_test)} test images: {loss:.5f}")
         max_accuracy = max(max_accuracy, acc1)
-        logger.info(f'Max mean accuracy: {max_accuracy:.2f}%')
+        logger.info(f'Test Max mean accuracy: {max_accuracy:.2f}%')
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
@@ -261,7 +261,8 @@ def train_one_epoch(config, model, criterion, data_loader, optimizer, epoch, mix
 
 
 @torch.no_grad()
-def validate(config, data_loader, model):
+def validate(config, data_loader, model, is_validation):
+    valid_or_test = "Validation" if is_validation else "Test"
     criterion = torch.nn.CrossEntropyLoss()
     model.eval()
 
@@ -320,21 +321,23 @@ def validate(config, data_loader, model):
             if idx % config.PRINT_FREQ == 0:
                 memory_used = torch.cuda.max_memory_allocated() / (1024.0 * 1024.0)
                 logger.info(
-                    f'Test: [{idx}/{len(data_loader)}]\t'
+                    f'{valid_or_test}: [{idx}/{len(data_loader)}]\t'
                     f'Time {batch_time[i].val:.3f} ({batch_time[i].avg:.3f})\t'
                     f'Loss {loss_meter[i].val:.4f} ({loss_meter[i].avg:.4f})\t'
                     f'Acc@1 {acc1_meter[i].val:.3f} ({acc1_meter[i].avg:.3f})\t'
-                    f'Acc@5 {acc5_meter[i].val:.3f} ({acc5_meter[i].avg:.3f})\t'
+                    # f'Acc@5 {acc5_meter[i].val:.3f} ({acc5_meter[i].avg:.3f})\t'
                     f'Mem {memory_used:.0f}MB\t'
                     f'Class {i}')
 
     for i in range(14):
-        logger.info(f' * Acc@1 {acc1_meter[i].avg:.3f} Acc@5 {acc5_meter[i].avg:.3f}')
-
         # auc
         all_preds[i], all_label[i] = all_preds[i][0], all_label[i][0]
         auc = roc_auc_score(all_label[i], all_preds[i][:, 1], multi_class='ovr')
-        logger.info("Valid AUC: %2.5f" % auc)
+        # logger.info("Valid AUC: %2.5f" % auc)
+        logger.info(f' * Acc@1 {acc1_meter[i].avg:.3f}\t'
+                    f'Acc@5 {acc5_meter[i].avg:.3f}\t'
+                    f'{valid_or_test} AUC {auc:.5f}\t'
+                    f'Class {i}')
 
         acc1s.append(acc1_meter[i].avg)
         acc5s.append(acc5_meter[i].avg)
@@ -342,7 +345,7 @@ def validate(config, data_loader, model):
         aucs.append(auc)
 
     from statistics import mean
-    logger.info("MEAN AUC: %2.5f" % mean(aucs))
+    logger.info(f'{valid_or_test} MEAN AUC: {mean(aucs):.5f}')
 
     return mean(acc1s), mean(acc5s), mean(losses)
 
