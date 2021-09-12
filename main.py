@@ -74,6 +74,9 @@ def parse_option():
     parser.add_argument("--testset", type=str, required=True, help='path to test dataset')
     # parser.add_argument("--class_num", required=True, type=int,
     #                     help="Class number for binary classification, 0-13 for nih")
+    parser.add_argument("--train_csv_path", type=str, required=True, help='path to train csv file')
+    parser.add_argument("--valid_csv_path", type=str, required=True, help='path to validation csv file')
+    parser.add_argument("--test_csv_path", type=str, required=True, help='path to test csv file')
 
     args, unparsed = parser.parse_known_args()
 

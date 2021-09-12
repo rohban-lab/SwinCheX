@@ -90,16 +90,9 @@ def build_dataset(is_train, config):
             dataset = datasets.ImageFolder(root, transform=transform)
         nb_classes = 1000
     elif config.DATA.DATASET == 'nih':
-        # train_csv_path = '/mnt/sda1/datasets/sina/transformer/csv/train_without_nofinding.csv'
-        # test_csv_path = '/mnt/sda1/datasets/sina/transformer/csv/test_without_nofinding.csv'
-        # train_csv_path = '/home/user01/nih/csv/train_without_nofinding.csv'
-        # test_csv_path = '/home/user01/nih/csv/test_without_nofinding.csv'
-        train_csv_path = '/home/user01/nih/csv_with_validation/train.csv'
-        valid_csv_path = '/home/user01/nih/csv_with_validation/validation.csv'
-        test_csv_path = '/home/user01/nih/csv_with_validation/test_without_nofinding.csv'
-        trainset = MyImageFolder(root=config.NIH.trainset, csv_path=train_csv_path, transform=transform)        #todo transform ok?
-        validset = MyImageFolder(root=config.NIH.validset, csv_path=valid_csv_path, transform=transform)
-        testset = MyImageFolder(root=config.NIH.testset, csv_path=test_csv_path, transform=transform)
+        trainset = MyImageFolder(root=config.NIH.trainset, csv_path=config.NIH.train_csv_path, transform=transform)
+        validset = MyImageFolder(root=config.NIH.validset, csv_path=config.NIH.valid_csv_path, transform=transform)
+        testset = MyImageFolder(root=config.NIH.testset, csv_path=config.NIH.test_csv_path, transform=transform)
         dataset = trainset if is_train else (validset, testset)
         nb_classes = 14
     else:

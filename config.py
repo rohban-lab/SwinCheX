@@ -178,6 +178,10 @@ _C.NIH.trainset = ''
 _C.NIH.validset = ''
 _C.NIH.testset = ''
 # _C.NIH.class_num = -1
+_C.NIH.train_csv_path = ''
+_C.NIH.valid_csv_path = ''
+_C.NIH.test_csv_path = ''
+
 
 
 def _update_config_from_file(config, cfg_file):
@@ -239,6 +243,9 @@ def update_config(config, args):
     config.NIH.validset = args.validset
     config.NIH.testset = args.testset
     # config.NIH.class_num = args.class_num
+    config.NIH.train_csv_path = args.train_csv_path
+    config.NIH.valid_csv_path = args.valid_csv_path
+    config.NIH.test_csv_path = args.test_csv_path
 
     config.freeze()
 
