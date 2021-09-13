@@ -187,7 +187,7 @@ def train_one_epoch(config, model, criterion, data_loader, optimizer, epoch, mix
             targets[i] = targets[i].cuda(non_blocking=True)
 
         if mixup_fn is not None:
-            samples, targets = mixup_fn(samples, targets)   #todo for on targets
+            samples, targets = mixup_fn(samples, targets)   #todo iterate on targets
 
         outputs = model(samples)
 
@@ -236,7 +236,7 @@ def train_one_epoch(config, model, criterion, data_loader, optimizer, epoch, mix
 
         torch.cuda.synchronize()
 
-        loss_meter.update(loss.item(), targets[0].size(0))  # todo * len(targets)?
+        loss_meter.update(loss.item(), targets[0].size(0))
         norm_meter.update(grad_norm)
         batch_time.update(time.time() - end)
         end = time.time()
@@ -297,7 +297,7 @@ def validate(config, data_loader, model, is_validation):
             loss = criterion(output[i], target[i])
             # acc1, acc5 = accuracy(output, target, topk=(1, 5))
             acc1 = accuracy(output[i], target[i], topk=(1,))
-            acc1 = torch.Tensor(acc1).to(device='cuda')   # wtf? without this added line it get's error in reduce_tensor because it's a list. So the original code shouldn't work too!?
+            acc1 = torch.Tensor(acc1).to(device='cuda')
             acc1 = reduce_tensor(acc1)
             # acc5 = reduce_tensor(acc5)
             loss = reduce_tensor(loss)
