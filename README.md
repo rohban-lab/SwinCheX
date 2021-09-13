@@ -150,7 +150,7 @@ Any use of third-party trademarks or logos are subject to those third-party's po
 ## instructions
 
 - You can find initial setup and pretrain models in [get_started.md](get_started.md).
-We used ImageNet-22K pre-trained model Swin-L with resolution 224x224 for our training.
+We used ImageNet-22K pre-trained model Swin-L with 224x224 resolution for our training.
 
 - If you had problems installing `Apex`, you can install it using conda-forge:
   ```
