@@ -181,6 +181,7 @@ _C.NIH.testset = ''
 _C.NIH.train_csv_path = ''
 _C.NIH.valid_csv_path = ''
 _C.NIH.test_csv_path = ''
+_C.NIH.num_mlp_heads = 3
 
 
 
@@ -246,6 +247,7 @@ def update_config(config, args):
     config.NIH.train_csv_path = args.train_csv_path
     config.NIH.valid_csv_path = args.valid_csv_path
     config.NIH.test_csv_path = args.test_csv_path
+    config.NIH.num_mlp_heads = args.num_mlp_heads
 
     config.freeze()
 

@@ -26,7 +26,8 @@ def build_model(config):
                                 drop_path_rate=config.MODEL.DROP_PATH_RATE,
                                 ape=config.MODEL.SWIN.APE,
                                 patch_norm=config.MODEL.SWIN.PATCH_NORM,
-                                use_checkpoint=config.TRAIN.USE_CHECKPOINT)
+                                use_checkpoint=config.TRAIN.USE_CHECKPOINT,
+                                num_mlp_heads=config.NIH.num_mlp_heads)
     else:
         raise NotImplementedError(f"Unkown model: {model_type}")
 

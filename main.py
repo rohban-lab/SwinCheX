@@ -77,6 +77,8 @@ def parse_option():
     parser.add_argument("--train_csv_path", type=str, required=True, help='path to train csv file')
     parser.add_argument("--valid_csv_path", type=str, required=True, help='path to validation csv file')
     parser.add_argument("--test_csv_path", type=str, required=True, help='path to test csv file')
+    parser.add_argument("--num_mlp_heads", type=int, default=3, choices=[0, 1, 2, 3],
+                        help='number of mlp layers at end of network')
 
     args, unparsed = parser.parse_known_args()
 
