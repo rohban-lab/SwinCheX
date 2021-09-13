@@ -14,6 +14,7 @@ import numpy as np
 import torch
 import torch.backends.cudnn as cudnn
 import torch.distributed as dist
+import torch.nn.functional as F
 
 from timm.loss import LabelSmoothingCrossEntropy, SoftTargetCrossEntropy
 from timm.utils import accuracy, AverageMeter
@@ -25,6 +26,7 @@ from lr_scheduler import build_scheduler
 from optimizer import build_optimizer
 from logger import create_logger
 from utils import load_checkpoint, save_checkpoint, get_grad_norm, auto_resume_helper, reduce_tensor
+from sklearn.metrics import roc_auc_score
 
 try:
     # noinspection PyUnresolvedReferences
@@ -66,6 +68,18 @@ def parse_option():
     # distributed training
     parser.add_argument("--local_rank", type=int, required=True, help='local rank for DistributedDataParallel')
 
+    #nih
+    parser.add_argument("--trainset", type=str, required=True, help='path to train dataset')
+    parser.add_argument("--validset", type=str, required=True, help='path to validation dataset')
+    parser.add_argument("--testset", type=str, required=True, help='path to test dataset')
+    # parser.add_argument("--class_num", required=True, type=int,
+    #                     help="Class number for binary classification, 0-13 for nih")
+    parser.add_argument("--train_csv_path", type=str, required=True, help='path to train csv file')
+    parser.add_argument("--valid_csv_path", type=str, required=True, help='path to validation csv file')
+    parser.add_argument("--test_csv_path", type=str, required=True, help='path to test csv file')
+    parser.add_argument("--num_mlp_heads", type=int, default=3, choices=[0, 1, 2, 3],
+                        help='number of mlp layers at end of network')
+
     args, unparsed = parser.parse_known_args()
 
     config = get_config(args)
@@ -74,7 +88,7 @@ def parse_option():
 
 
 def main(config):
-    dataset_train, dataset_val, data_loader_train, data_loader_val, mixup_fn = build_loader(config)
+    dataset_train, dataset_val, dataset_test, data_loader_train, data_loader_val, data_loader_test, mixup_fn = build_loader(config)
 
     logger.info(f"Creating model:{config.MODEL.TYPE}/{config.MODEL.NAME}")
     model = build_model(config)
@@ -119,13 +133,18 @@ def main(config):
 
     if config.MODEL.RESUME:
         max_accuracy = load_checkpoint(config, model_without_ddp, optimizer, lr_scheduler, logger)
-        acc1, acc5, loss = validate(config, data_loader_val, model)
-        logger.info(f"Accuracy of the network on the {len(dataset_val)} test images: {acc1:.1f}%")
+        acc1, acc5, loss = validate(config, data_loader_val, model, is_validation=True)
+        logger.info(f"Mean Accuracy of the network on the {len(dataset_val)} validation images: {acc1:.2f}%")
+        logger.info(f"Mean Loss of the network on the {len(dataset_val)} validation images: {loss:.5f}")
+        acc1, acc5, loss = validate(config, data_loader_test, model, is_validation=False)
+        logger.info(f"Mean Accuracy of the network on the {len(dataset_test)} test images: {acc1:.2f}%")
+        logger.info(f"Mean Loss of the network on the {len(dataset_test)} test images: {loss:.5f}")
         if config.EVAL_MODE:
             return
 
     if config.THROUGHPUT_MODE:
         throughput(data_loader_val, model, logger)
+        throughput(data_loader_test, model, logger)
         return
 
     logger.info("Start training")
@@ -137,10 +156,14 @@ def main(config):
         if dist.get_rank() == 0 and (epoch % config.SAVE_FREQ == 0 or epoch == (config.TRAIN.EPOCHS - 1)):
             save_checkpoint(config, epoch, model_without_ddp, max_accuracy, optimizer, lr_scheduler, logger)
 
-        acc1, acc5, loss = validate(config, data_loader_val, model)
-        logger.info(f"Accuracy of the network on the {len(dataset_val)} test images: {acc1:.1f}%")
+        acc1, acc5, loss = validate(config, data_loader_val, model, is_validation=True)
+        logger.info(f"Mean Accuracy of the network on the {len(dataset_val)} validation images: {acc1:.2f}%")
+        logger.info(f"Mean Loss of the network on the {len(dataset_val)} validation images: {loss:.5f}")
+        acc1, acc5, loss = validate(config, data_loader_test, model, is_validation=False)
+        logger.info(f"Mean Accuracy of the network on the {len(dataset_test)} test images: {acc1:.2f}%")
+        logger.info(f"Mean Loss of the network on the {len(dataset_test)} test images: {loss:.5f}")
         max_accuracy = max(max_accuracy, acc1)
-        logger.info(f'Max accuracy: {max_accuracy:.2f}%')
+        logger.info(f'Test Max mean accuracy: {max_accuracy:.2f}%')
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
@@ -160,15 +183,18 @@ def train_one_epoch(config, model, criterion, data_loader, optimizer, epoch, mix
     end = time.time()
     for idx, (samples, targets) in enumerate(data_loader):
         samples = samples.cuda(non_blocking=True)
-        targets = targets.cuda(non_blocking=True)
+        for i in range(len(targets)):
+            targets[i] = targets[i].cuda(non_blocking=True)
 
         if mixup_fn is not None:
-            samples, targets = mixup_fn(samples, targets)
+            samples, targets = mixup_fn(samples, targets)   #todo iterate on targets
 
         outputs = model(samples)
 
         if config.TRAIN.ACCUMULATION_STEPS > 1:
-            loss = criterion(outputs, targets)
+            loss = criterion(outputs[0], targets[0])
+            for i in range(1, len(targets)):
+                loss += criterion(outputs[i], targets[i])
             loss = loss / config.TRAIN.ACCUMULATION_STEPS
             if config.AMP_OPT_LEVEL != "O0":
                 with amp.scale_loss(loss, optimizer) as scaled_loss:
@@ -188,7 +214,9 @@ def train_one_epoch(config, model, criterion, data_loader, optimizer, epoch, mix
                 optimizer.zero_grad()
                 lr_scheduler.step_update(epoch * num_steps + idx)
         else:
-            loss = criterion(outputs, targets)
+            loss = criterion(outputs[0], targets[0])
+            for i in range(1, len(targets)):
+                loss += criterion(outputs[i], targets[i])
             optimizer.zero_grad()
             if config.AMP_OPT_LEVEL != "O0":
                 with amp.scale_loss(loss, optimizer) as scaled_loss:
@@ -208,7 +236,7 @@ def train_one_epoch(config, model, criterion, data_loader, optimizer, epoch, mix
 
         torch.cuda.synchronize()
 
-        loss_meter.update(loss.item(), targets.size(0))
+        loss_meter.update(loss.item(), targets[0].size(0))
         norm_meter.update(grad_norm)
         batch_time.update(time.time() - end)
         end = time.time()
@@ -224,55 +252,107 @@ def train_one_epoch(config, model, criterion, data_loader, optimizer, epoch, mix
                 f'loss {loss_meter.val:.4f} ({loss_meter.avg:.4f})\t'
                 f'grad_norm {norm_meter.val:.4f} ({norm_meter.avg:.4f})\t'
                 f'mem {memory_used:.0f}MB')
+    lr = optimizer.param_groups[0]['lr']
+    memory_used = torch.cuda.max_memory_allocated() / (1024.0 * 1024.0)
+    logger.info(
+        f'Train: [{epoch}/{config.TRAIN.EPOCHS}]\t'
+        f'lr {lr:.6f}\t'
+        f'time {batch_time.val:.4f} ({batch_time.avg:.4f})\t'
+        f'loss {loss_meter.val:.4f} ({loss_meter.avg:.4f})\t'
+        f'grad_norm {norm_meter.val:.4f} ({norm_meter.avg:.4f})\t'
+        f'mem {memory_used:.0f}MB')
     epoch_time = time.time() - start
     logger.info(f"EPOCH {epoch} training takes {datetime.timedelta(seconds=int(epoch_time))}")
 
 
 @torch.no_grad()
-def validate(config, data_loader, model):
+def validate(config, data_loader, model, is_validation):
+    valid_or_test = "Validation" if is_validation else "Test"
     criterion = torch.nn.CrossEntropyLoss()
     model.eval()
 
-    batch_time = AverageMeter()
-    loss_meter = AverageMeter()
-    acc1_meter = AverageMeter()
-    acc5_meter = AverageMeter()
+    batch_time = [AverageMeter() for _ in range(14)]
+    loss_meter = [AverageMeter() for _ in range(14)]
+    acc1_meter = [AverageMeter() for _ in range(14)]
+    acc5_meter = [AverageMeter() for _ in range(14)]
+
+    acc1s = []
+    acc5s = []
+    losses = []
+    aucs = []
 
     end = time.time()
+    all_preds = [[] for _ in range(14)]
+    all_label = [[] for _ in range(14)]
     for idx, (images, target) in enumerate(data_loader):
         images = images.cuda(non_blocking=True)
-        target = target.cuda(non_blocking=True)
+        for i in range(len(target)):
+            target[i] = target[i].cuda(non_blocking=True)
 
         # compute output
         output = model(images)
 
-        # measure accuracy and record loss
-        loss = criterion(output, target)
-        acc1, acc5 = accuracy(output, target, topk=(1, 5))
+        for i in range(len(target)):
+            # measure accuracy and record loss
+            loss = criterion(output[i], target[i])
+            # acc1, acc5 = accuracy(output, target, topk=(1, 5))
+            acc1 = accuracy(output[i], target[i], topk=(1,))
+            acc1 = torch.Tensor(acc1).to(device='cuda')
+            acc1 = reduce_tensor(acc1)
+            # acc5 = reduce_tensor(acc5)
+            loss = reduce_tensor(loss)
 
-        acc1 = reduce_tensor(acc1)
-        acc5 = reduce_tensor(acc5)
-        loss = reduce_tensor(loss)
+            loss_meter[i].update(loss.item(), target[i].size(0))
+            acc1_meter[i].update(acc1.item(), target[i].size(0))
+            # acc5_meter.update(acc5.item(), target.size(0))
 
-        loss_meter.update(loss.item(), target.size(0))
-        acc1_meter.update(acc1.item(), target.size(0))
-        acc5_meter.update(acc5.item(), target.size(0))
+            # auc
+            preds = F.softmax(output[i], dim=1)
+            if len(all_preds[i]) == 0:
+                all_preds[i].append(preds.detach().cpu().numpy())
+                all_label[i].append(target[i].detach().cpu().numpy())
+            else:
+                all_preds[i][0] = np.append(
+                    all_preds[i][0], preds.detach().cpu().numpy(), axis=0
+                )
+                all_label[i][0] = np.append(
+                    all_label[i][0], target[i].detach().cpu().numpy(), axis=0
+                )
 
-        # measure elapsed time
-        batch_time.update(time.time() - end)
-        end = time.time()
+            # measure elapsed time
+            batch_time[i].update(time.time() - end)
+            end = time.time()
 
-        if idx % config.PRINT_FREQ == 0:
-            memory_used = torch.cuda.max_memory_allocated() / (1024.0 * 1024.0)
-            logger.info(
-                f'Test: [{idx}/{len(data_loader)}]\t'
-                f'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                f'Loss {loss_meter.val:.4f} ({loss_meter.avg:.4f})\t'
-                f'Acc@1 {acc1_meter.val:.3f} ({acc1_meter.avg:.3f})\t'
-                f'Acc@5 {acc5_meter.val:.3f} ({acc5_meter.avg:.3f})\t'
-                f'Mem {memory_used:.0f}MB')
-    logger.info(f' * Acc@1 {acc1_meter.avg:.3f} Acc@5 {acc5_meter.avg:.3f}')
-    return acc1_meter.avg, acc5_meter.avg, loss_meter.avg
+            if idx % config.PRINT_FREQ == 0:
+                memory_used = torch.cuda.max_memory_allocated() / (1024.0 * 1024.0)
+                logger.info(
+                    f'{valid_or_test}: [{idx}/{len(data_loader)}]\t'
+                    f'Time {batch_time[i].val:.3f} ({batch_time[i].avg:.3f})\t'
+                    f'Loss {loss_meter[i].val:.4f} ({loss_meter[i].avg:.4f})\t'
+                    f'Acc@1 {acc1_meter[i].val:.3f} ({acc1_meter[i].avg:.3f})\t'
+                    # f'Acc@5 {acc5_meter[i].val:.3f} ({acc5_meter[i].avg:.3f})\t'
+                    f'Mem {memory_used:.0f}MB\t'
+                    f'Class {i}')
+
+    for i in range(14):
+        # auc
+        all_preds[i], all_label[i] = all_preds[i][0], all_label[i][0]
+        auc = roc_auc_score(all_label[i], all_preds[i][:, 1], multi_class='ovr')
+        # logger.info("Valid AUC: %2.5f" % auc)
+        logger.info(f' * Acc@1 {acc1_meter[i].avg:.3f}\t'
+                    f'Acc@5 {acc5_meter[i].avg:.3f}\t'
+                    f'{valid_or_test} AUC {auc:.5f}\t'
+                    f'Class {i}')
+
+        acc1s.append(acc1_meter[i].avg)
+        acc5s.append(acc5_meter[i].avg)
+        losses.append(loss_meter[i].avg)
+        aucs.append(auc)
+
+    from statistics import mean
+    logger.info(f'{valid_or_test} MEAN AUC: {mean(aucs):.5f}')
+
+    return mean(acc1s), mean(acc5s), mean(losses)
 
 
 @torch.no_grad()

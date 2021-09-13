@@ -486,7 +486,7 @@ class SwinTransformer(nn.Module):
                  window_size=7, mlp_ratio=4., qkv_bias=True, qk_scale=None,
                  drop_rate=0., attn_drop_rate=0., drop_path_rate=0.1,
                  norm_layer=nn.LayerNorm, ape=False, patch_norm=True,
-                 use_checkpoint=False, **kwargs):
+                 use_checkpoint=False, num_mlp_heads=3, **kwargs):
         super().__init__()
 
         self.num_classes = num_classes
@@ -496,6 +496,7 @@ class SwinTransformer(nn.Module):
         self.patch_norm = patch_norm
         self.num_features = int(embed_dim * 2 ** (self.num_layers - 1))
         self.mlp_ratio = mlp_ratio
+        self.num_mlp_heads = num_mlp_heads
 
         # split image into non-overlapping patches
         self.patch_embed = PatchEmbed(
@@ -535,7 +536,30 @@ class SwinTransformer(nn.Module):
 
         self.norm = norm_layer(self.num_features)
         self.avgpool = nn.AdaptiveAvgPool1d(1)
-        self.head = nn.Linear(self.num_features, num_classes) if num_classes > 0 else nn.Identity()
+        self.heads = nn.ModuleList()
+        if num_mlp_heads > 0:
+            self.heads2 = nn.ModuleList()
+        if num_mlp_heads > 1:
+            self.heads3 = nn.ModuleList()
+        if num_mlp_heads > 2:
+            self.heads4 = nn.ModuleList()
+        if num_mlp_heads > 0:
+            self.relu = nn.ReLU()     # for 1 or more heads
+        for i in range(num_classes):
+            if num_mlp_heads == 0:
+                self.heads.append(nn.Linear(self.num_features, 2))
+            if num_mlp_heads == 1:
+                self.heads.append(nn.Linear(self.num_features, 48))
+                self.heads2.append(nn.Linear(48, 2))
+            if num_mlp_heads == 2:
+                self.heads.append(nn.Linear(self.num_features, 384))
+                self.heads2.append(nn.Linear(384, 48))
+                self.heads3.append(nn.Linear(48, 2))
+            if num_mlp_heads == 3:
+                self.heads.append(nn.Linear(self.num_features, 384))
+                self.heads2.append(nn.Linear(384, 48))
+                self.heads3.append(nn.Linear(48, 48))
+                self.heads4.append(nn.Linear(48, 2))
 
         self.apply(self._init_weights)
 
@@ -572,8 +596,17 @@ class SwinTransformer(nn.Module):
 
     def forward(self, x):
         x = self.forward_features(x)
-        x = self.head(x)
-        return x
+        y = []
+        for i in range(len(self.heads)):
+            if self.num_mlp_heads == 0:
+                y.append(self.heads[i](x))
+            if self.num_mlp_heads == 1:
+                y.append(self.heads2[i](self.relu(self.heads[i](x))))
+            if self.num_mlp_heads == 2:
+                y.append(self.heads3[i](self.relu(self.heads2[i](self.relu(self.heads[i](x))))))
+            if self.num_mlp_heads == 3:
+                y.append(self.heads4[i](self.relu(self.heads3[i](self.relu(self.heads2[i](self.relu(self.heads[i](x))))))))
+        return y
 
     def flops(self):
         flops = 0

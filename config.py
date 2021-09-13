@@ -23,7 +23,8 @@ _C.DATA.BATCH_SIZE = 128
 # Path to dataset, could be overwritten by command line argument
 _C.DATA.DATA_PATH = ''
 # Dataset name
-_C.DATA.DATASET = 'imagenet'
+# _C.DATA.DATASET = 'imagenet'
+_C.DATA.DATASET = 'nih'
 # Input image size
 _C.DATA.IMG_SIZE = 224
 # Interpolation to resize image (random, bilinear, bicubic)
@@ -36,7 +37,7 @@ _C.DATA.CACHE_MODE = 'part'
 # Pin CPU memory in DataLoader for more efficient (sometimes) transfer to GPU.
 _C.DATA.PIN_MEMORY = True
 # Number of data loading threads
-_C.DATA.NUM_WORKERS = 8
+_C.DATA.NUM_WORKERS = 2
 
 # -----------------------------------------------------------------------------
 # Model settings
@@ -49,7 +50,8 @@ _C.MODEL.NAME = 'swin_tiny_patch4_window7_224'
 # Checkpoint to resume, could be overwritten by command line argument
 _C.MODEL.RESUME = ''
 # Number of classes, overwritten in data preparation
-_C.MODEL.NUM_CLASSES = 1000
+# _C.MODEL.NUM_CLASSES = 1000
+_C.MODEL.NUM_CLASSES = 14
 # Dropout rate
 _C.MODEL.DROP_RATE = 0.0
 # Drop path rate
@@ -70,18 +72,6 @@ _C.MODEL.SWIN.QKV_BIAS = True
 _C.MODEL.SWIN.QK_SCALE = None
 _C.MODEL.SWIN.APE = False
 _C.MODEL.SWIN.PATCH_NORM = True
-
-# Swin MLP parameters
-_C.MODEL.SWIN_MLP = CN()
-_C.MODEL.SWIN_MLP.PATCH_SIZE = 4
-_C.MODEL.SWIN_MLP.IN_CHANS = 3
-_C.MODEL.SWIN_MLP.EMBED_DIM = 96
-_C.MODEL.SWIN_MLP.DEPTHS = [2, 2, 6, 2]
-_C.MODEL.SWIN_MLP.NUM_HEADS = [3, 6, 12, 24]
-_C.MODEL.SWIN_MLP.WINDOW_SIZE = 7
-_C.MODEL.SWIN_MLP.MLP_RATIO = 4.
-_C.MODEL.SWIN_MLP.APE = False
-_C.MODEL.SWIN_MLP.PATCH_NORM = True
 
 # -----------------------------------------------------------------------------
 # Training settings
@@ -138,9 +128,11 @@ _C.AUG.REMODE = 'pixel'
 # Random erase count
 _C.AUG.RECOUNT = 1
 # Mixup alpha, mixup enabled if > 0
-_C.AUG.MIXUP = 0.8
+# _C.AUG.MIXUP = 0.8
+_C.AUG.MIXUP = 0
 # Cutmix alpha, cutmix enabled if > 0
-_C.AUG.CUTMIX = 1.0
+# _C.AUG.CUTMIX = 1.0
+_C.AUG.CUTMIX = 0
 # Cutmix min/max ratio, overrides alpha and enables cutmix if set
 _C.AUG.CUTMIX_MINMAX = None
 # Probability of performing mixup or cutmix when either/both is enabled
@@ -170,7 +162,7 @@ _C.TAG = 'default'
 # Frequency to save checkpoint
 _C.SAVE_FREQ = 1
 # Frequency to logging info
-_C.PRINT_FREQ = 10
+_C.PRINT_FREQ = 100
 # Fixed random seed
 _C.SEED = 0
 # Perform evaluation only, overwritten by command line argument
@@ -179,6 +171,18 @@ _C.EVAL_MODE = False
 _C.THROUGHPUT_MODE = False
 # local rank for DistributedDataParallel, given by command line argument
 _C.LOCAL_RANK = 0
+
+#nih
+_C.NIH = CN()
+_C.NIH.trainset = ''
+_C.NIH.validset = ''
+_C.NIH.testset = ''
+# _C.NIH.class_num = -1
+_C.NIH.train_csv_path = ''
+_C.NIH.valid_csv_path = ''
+_C.NIH.test_csv_path = ''
+_C.NIH.num_mlp_heads = 3
+
 
 
 def _update_config_from_file(config, cfg_file):
@@ -234,6 +238,16 @@ def update_config(config, args):
 
     # output folder
     config.OUTPUT = os.path.join(config.OUTPUT, config.MODEL.NAME, config.TAG)
+
+    # nih
+    config.NIH.trainset = args.trainset
+    config.NIH.validset = args.validset
+    config.NIH.testset = args.testset
+    # config.NIH.class_num = args.class_num
+    config.NIH.train_csv_path = args.train_csv_path
+    config.NIH.valid_csv_path = args.valid_csv_path
+    config.NIH.test_csv_path = args.test_csv_path
+    config.NIH.num_mlp_heads = args.num_mlp_heads
 
     config.freeze()
 
