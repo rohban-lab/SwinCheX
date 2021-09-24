@@ -170,7 +170,7 @@ Merge images from different folders into one folder. Alternatively, you can have
   python -m torch.distributed.launch --nproc_per_node 1 --master_port 12345 main.py \
   --cfg configs/swin_large_patch4_window7_224.yaml --resume path/to/pretrain/swin_large_patch4_window7_224_22k.pth \
   --trainset path/to/train_data/ --validset path/to/validation_data/ --testset path/to/test_data/ \
-  --train_csv_path configs/NIH/train.csv --valid_csv_path configs/NIH/valid.csv --test_csv_path configs/NIH/test.csv \
+  --train_csv_path configs/NIH/train.csv --valid_csv_path configs/NIH/validation.csv --test_csv_path configs/NIH/test.csv \
   --batch-size 32 [--output <output-directory> --tag <job-tag> --num_mlp_heads 3] > log.txt
   ```
 
